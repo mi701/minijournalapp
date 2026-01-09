@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Shelter - The Anti-Journaling App</title>
+    <title>ことばおきば</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -610,7 +610,21 @@
 
             // Main Layout
             return (
-                <div className="max-w-md mx-auto h-[100dvh] shadow-2xl relative overflow-hidden flex flex-col bg-white">
+                <div className="max-w-md mx-auto h-[100dvh] shadow-2xl relative overflow-hidden flex flex-col bg-shelter-bg">
+                    {/* Rhythmical Logo Section */}
+                    <div className="pt-12 pb-6 px-10 select-none">
+                        <div className="flex flex-col gap-2 italic text-shelter-muted/40 font-serif">
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-3xl tracking-tighter">こと</span>
+                                <span className="w-12 h-12 rounded-full border-2 border-shelter-border flex items-center justify-center text-xl font-bold bg-white text-shelter-text/60 shadow-sm">ば</span>
+                            </div>
+                            <div className="flex items-baseline gap-2 ml-8">
+                                <span className="text-3xl tracking-tighter">おき</span>
+                                <span className="w-12 h-12 rounded-full border-2 border-shelter-border flex items-center justify-center text-xl font-bold bg-white text-shelter-text/60 shadow-sm">ば</span>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Content */}
                     <main className="flex-1 overflow-hidden">
                         {activeTab === 'record' && <RecordTab />}
