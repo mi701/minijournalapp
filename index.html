@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shelter - The Anti-Journaling App</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        shelter: {
+                            bg: '#f8f9fa',
+                            surface: '#ffffff',
+                            text: '#495057',
+                            muted: '#adb5bd',
+                            border: '#e9ecef',
+                            chip: '#f1f3f5'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'UI-Monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+                        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <!-- Dexie.js -->
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <!-- React & Babel for direct browser execution (for development/simple app) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google AI SDK -->
+    <script type="importmap">
+        {
+          "imports": {
+            "@google/generative-ai": "https://esm.run/@google/generative-ai"
+          }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            color: #495057;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .canvas-area {
+            height: calc(100dvh - 280px);
+        }
+
+        .input-deck {
+            height: 280px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #e9ecef;
+            border-radius: 10px;
+        }
+
+        /* Snap scrolling for selection */
+        .selection-scroll {
+            scroll-snap-type: x mandatory;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .selection-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .selection-scroll>* {
+            scroll-snap-align: start;
+        }
+
+        /* Custom animation */
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-5px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        .float-animation {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings:
+                'FILL' 0,
+                'wght' 300,
+                'GRAD' 0,
+                'opsz' 24;
+            font-size: 20px;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+        const { useState, useEffect, useMemo, useCallback } = React;
+
+        // --- Database ---
+        const db = new Dexie("ShelterDB");
+        db.version(1).stores({
+            logs: '++id, timestamp, dateString, is_ai_generated'
+        });
+
+        // --- Constants & Fallbacks ---
+        const DEFAULT_WORDS = {
+            body: ['重い', '軽い', 'だるい', '張っている', '力が入らない', '冷えている', 'ぼんやり', '眠い', '乾いている', 'こわばっている', '何も感じない'],
+            mind: ['回らない', '静か', 'うるさい', '散らかっている', '止まっている', '追いつかない', '空っぽ', '引っかかっている', '鈍い', '早い'],
+            vibe: ['落ち着かない', '静か', '重たい', 'やわらかい', '張りつめている', 'ざわざわ', 'ぼんやり', '乾いた感じ', 'ぬるい', '閉じている'],
+            act: ['止まっていた', 'ゆっくり', 'だらだら', '最低限', 'なんとか', '同じこと', '途中まで', '手を動かした', '横になっていた', 'ぼーっとした'],
+            dist: ['近い', '遠い', 'ずれている', '触れていない', '関わらなかった', '一人', '外側にいた', '内側にこもっていた', '境目がない'],
+            time: ['長かった', '短かった', '早かった', '止まっていた', '進んだ気がしない', '一瞬', 'だらだら続いた', '区切りがない'],
+            texture: ['固い', '柔らかい', 'ざらざら', '滑らか', '尖っている', '湿っている', '乾いている', '粘る', 'さらさら'],
+            light: ['暗い', 'まぶしい', 'ぼんやり', '鮮やか', '灰色', '透き通っている', '濁っている', '淡い', '濃い'],
+            sound: ['静か', '響いている', '遮られている', '遠くの音', '継続的な音', '途切れた音', 'くぐもった音', 'かすかな音'],
+            gravity: ['沈んでいる', '浮いている', '傾いている', '支えられている', '離れている', '引き寄せられる', '反発している']
+        };
+
+        // --- Components ---
+
+        const Chip = ({ children, onClick, active, loading }) => (
+            <button
+                onClick={onClick}
+                disabled={loading}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 transform active:scale-95 whitespace-nowrap ${active
+                    ? 'bg-shelter-text text-white shadow-sm'
+                    : 'bg-shelter-chip text-shelter-text hover:bg-shelter-border border border-transparent'
+                    } ${loading ? 'opacity-50 animate-pulse' : ''}`}
+            >
+                {children}
+            </button>
+        );
+
+        const CanvasWord = ({ word, onClick }) => (
+            <div
+                onClick={onClick}
+                className="bg-white px-3 py-1.5 rounded-lg border border-shelter-border shadow-sm text-sm font-mono animate-in fade-in zoom-in duration-300 float-animation cursor-pointer hover:bg-red-50 hover:border-red-100 transition-colors"
+            >
+                {word}
+            </div>
+        );
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('record'); // record, observe, settings
+            const [selectedCategory, setSelectedCategory] = useState(null);
+            const [canvasWords, setCanvasWords] = useState([]);
+            const [dynamicWords, setDynamicWords] = useState(DEFAULT_WORDS);
+            const [isLoading, setIsLoading] = useState(false);
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('shelter_gemini_api_key') || '');
+            const [showCustomInput, setShowCustomInput] = useState(false);
+            const [customWord, setCustomWord] = useState('');
+            const [debugInfo, setDebugInfo] = useState(null);
+            const [aiDisabled, setAiDisabled] = useState(false);
+
+            useEffect(() => {
+                localStorage.setItem('shelter_gemini_api_key', apiKey);
+            }, [apiKey]);
+
+
+            const fetchWords = async (category) => {
+                if (!apiKey || aiDisabled) {
+                    if (aiDisabled) setDebugInfo("クォータ制限のためAI生成を一時停止しています。");
+                    return;
+                }
+                setIsLoading(true);
+                setDebugInfo("AI接続を診断中...");
+
+                try {
+                    // 1. 利用可能なモデルを取得して実在を確認する (事実ベースの切り分け)
+                    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+                    const listRes = await fetch(listUrl);
+                    if (!listRes.ok) throw new Error("APIキーの確認に失敗しました。キーが正しいか、有効期限を確認してください。");
+                    const listData = await listRes.json();
+
+                    // 利用可能モデルのIDを正規化して抽出
+                    const availableModels = listData.models.map(m => m.name.split('/').pop());
+
+                    // 2. 優先順位に基づき候補を選別 (最新モデルを優先的に含める)
+                    const candidates = [
+                        "gemini-2.0-flash-exp",
+                        "gemini-2.0-flash",
+                        "gemini-1.5-flash",
+                        "gemini-1.5-flash-8b",
+                        "gemini-pro"
+                    ].filter(m => availableModels.includes(m));
+
+                    if (candidates.length === 0) {
+                        throw new Error(`利用可能なモデルが見つかりません。ListModels結果: ${availableModels.slice(0, 3).join(', ')}...`);
+                    }
+
+                    let resultWords = null;
+                    let lastErrorMsg = "";
+
+                    // 3. 有効なモデルから順に trial-and-error で接続を試みる (自己修復)
+                    for (const modelId of candidates) {
+                        try {
+                            setDebugInfo(`AI(${modelId}) から言葉を募集中...`);
+                            // 事実: v1beta エンドポイントを使用することで全モデルの最新機能にアクセス
+                            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
+                            const res = await fetch(url, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: `Generate 10 abstract Japanese words for category: ${category}. Return ONLY a JSON array of strings: ["w1", "w2", ...]` }] }],
+                                    generationConfig: { temperature: 1.0 }
+                                })
+                            });
+
+                            if (res.ok) {
+                                const data = await res.json();
+                                const text = data.candidates[0].content.parts[0].text;
+                                const match = text.match(/\[.*\]/s);
+                                if (match) {
+                                    resultWords = JSON.parse(match[0]);
+                                    break; // 成功したらループを抜ける
+                                }
+                            } else {
+                                const err = await res.json();
+                                lastErrorMsg = err.error?.message || res.statusText;
+
+                                // 事実: Quota exceeded (429/Limit 0) の場合は他のモデルを試しても無意味なため中断
+                                if (res.status === 429 || lastErrorMsg.includes("quota")) {
+                                    setAiDisabled(true);
+                                    throw new Error(`Quota limit reached: ${lastErrorMsg}`);
+                                }
+                                console.warn(`Candidate ${modelId} failed:`, lastErrorMsg);
+                            }
+                        } catch (e) {
+                            lastErrorMsg = e.message;
+                        }
+                    }
+
+                    if (Array.isArray(resultWords)) {
+                        setDynamicWords(prev => ({ ...prev, [category]: resultWords }));
+                        setDebugInfo(null);
+                    } else {
+                        throw new Error(lastErrorMsg || "単語の生成に失敗しました。");
+                    }
+                } catch (error) {
+                    console.error("Gemini API Error:", error);
+                    const msg = error.message.includes("Quota")
+                        ? "AIは現在クォータ制限のためお休みしています。内蔵の語彙をお楽しみください。"
+                        : `接続状況を確認しています: ${error.message}`;
+                    setDebugInfo(msg);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleReload = () => {
+                if (selectedCategory && apiKey) {
+                    fetchWords(selectedCategory);
+                }
+            };
+
+            const handleCategoryClick = (catId) => {
+                setSelectedCategory(catId);
+                // If AI is available and we haven't fetched for this session (simplified cache)
+                if (apiKey && dynamicWords[catId] === DEFAULT_WORDS[catId]) {
+                    fetchWords(catId);
+                }
+            };
+
+            const handleAddWord = (word) => {
+                setCanvasWords(prev => [...prev, word]);
+            };
+
+            const handleRemoveWord = (index) => {
+                if (window.confirm('この言葉を取り除きますか？')) {
+                    setCanvasWords(prev => prev.filter((_, i) => i !== index));
+                }
+            };
+
+            const handleAddCustomWord = (e) => {
+                if (e.key === 'Enter' && customWord.trim()) {
+                    handleAddWord(customWord.trim());
+                    setCustomWord('');
+                    setShowCustomInput(false);
+                }
+            };
+
+            const handleSave = async () => {
+                if (canvasWords.length === 0) return;
+
+                const now = new Date();
+                const log = {
+                    timestamp: now.getTime(),
+                    dateString: now.toISOString().split('T')[0],
+                    words: canvasWords,
+                    is_ai_generated: !!apiKey
+                };
+
+                await db.logs.add(log);
+                setCanvasWords([]);
+            };
+
+            // Tab: 記録 (The Buffer)
+            const RecordTab = () => {
+                const [catPage, setCatPage] = useState(0);
+                const itemsPerPage = 5;
+
+                const categories = [
+                    { id: 'body', label: '体' },
+                    { id: 'mind', label: '頭' },
+                    { id: 'vibe', label: '気配' },
+                    { id: 'act', label: '動き' },
+                    { id: 'dist', label: '距離' },
+                    { id: 'time', label: '時間' },
+                    { id: 'texture', label: '質感' },
+                    { id: 'light', label: '光・色' },
+                    { id: 'sound', label: '音' },
+                    { id: 'gravity', label: '重力' }
+                ];
+
+                const totalPages = Math.ceil(categories.length / itemsPerPage);
+                const currentCats = categories.slice(catPage * itemsPerPage, (catPage + 1) * itemsPerPage);
+
+                return (
+                    <div className="flex flex-col h-full bg-shelter-bg">
+                        {/* The Canvas */}
+                        <div className="canvas-area p-8 overflow-auto flex flex-wrap content-start gap-3 relative">
+                            {debugInfo && (
+                                <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 z-50 animate-in fade-in zoom-in duration-300">
+                                    <div className="bg-white/95 backdrop-blur-sm border border-shelter-border p-6 rounded-2xl shadow-xl space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-shelter-text animate-ping' : (aiDisabled ? 'bg-shelter-muted' : 'bg-red-400')}`}></span>
+                                            <span className="text-[10px] font-mono font-bold tracking-tighter uppercase text-shelter-muted">
+                                                {isLoading ? 'AI Connecting' : (aiDisabled ? 'AI Resting' : 'Connection Info')}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm font-mono leading-relaxed text-shelter-text break-words">
+                                            {debugInfo}
+                                        </p>
+                                        {!isLoading && (
+                                            <button
+                                                onClick={() => setDebugInfo(null)}
+                                                className="text-[10px] font-mono underline text-shelter-muted hover:text-shelter-text"
+                                            >
+                                                [ Close ]
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {canvasWords.length === 0 && !debugInfo ? (
+                                <div className="w-full h-full flex items-center justify-center text-shelter-muted font-mono text-sm">
+                                    [ 余白 ]
+                                </div>
+                            ) : (
+                                canvasWords.map((word, i) => (
+                                    <CanvasWord
+                                        key={`${word}-${i}`}
+                                        word={word}
+                                        onClick={() => handleRemoveWord(i)}
+                                    />
+                                ))
+                            )}
+                        </div>
+
+                        {/* Input Deck */}
+                        <div className="input-deck bg-white border-t border-shelter-border p-6 flex flex-col gap-4 shadow-[0_-4px_24px_-10px_rgba(0,0,0,0.05)] rounded-t-3xl relative">
+                            {/* Tier 1: Categories (Top) */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        disabled={catPage === 0}
+                                        onClick={() => setCatPage(p => p - 1)}
+                                        className={`p-1 ${catPage === 0 ? 'opacity-20 cursor-not-allowed' : 'text-shelter-muted hover:text-shelter-text'}`}
+                                    >
+                                        <span className="material-symbols-outlined !text-base">chevron_left</span>
+                                    </button>
+                                    <div className="flex gap-4">
+                                        {currentCats.map(cat => (
+                                            <button
+                                                key={cat.id}
+                                                onClick={() => handleCategoryClick(cat.id)}
+                                                className={`text-base font-semibold transition-colors ${selectedCategory === cat.id ? 'text-shelter-text border-b-2 border-shelter-text' : 'text-shelter-muted hover:text-shelter-text'}`}
+                                            >
+                                                {cat.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        disabled={catPage === totalPages - 1}
+                                        onClick={() => setCatPage(p => p + 1)}
+                                        className={`p-1 ${catPage === totalPages - 1 ? 'opacity-20 cursor-not-allowed' : 'text-shelter-muted hover:text-shelter-text'}`}
+                                    >
+                                        <span className="material-symbols-outlined !text-base">chevron_right</span>
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={handleSave}
+                                    disabled={canvasWords.length === 0}
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${canvasWords.length > 0 ? 'bg-shelter-text text-white shadow-md active:scale-95' : 'bg-shelter-chip text-shelter-muted cursor-not-allowed opacity-50'}`}
+                                    title="記録を保存"
+                                >
+                                    <span className="material-symbols-outlined !text-base">done_all</span>
+                                </button>
+                            </div>
+
+                            {/* Tier 2: Word Chips (Middle) */}
+                            <div className="flex-1 min-h-[120px] max-h-[200px] overflow-y-auto selection-scroll flex flex-wrap content-start gap-2 pr-2 custom-scrollbar">
+                                {showCustomInput ? (
+                                    <input
+                                        autoFocus
+                                        className="w-full bg-shelter-chip px-4 py-2 rounded-xl text-sm outline-none font-mono mb-2"
+                                        placeholder="自由入力..."
+                                        value={customWord}
+                                        onChange={(e) => setCustomWord(e.target.value)}
+                                        onKeyDown={handleAddCustomWord}
+                                        onBlur={() => !customWord && setShowCustomInput(false)}
+                                    />
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => setShowCustomInput(true)}
+                                            className="w-10 h-10 flex-shrink-0 bg-shelter-chip rounded-xl flex items-center justify-center text-shelter-muted hover:bg-shelter-border transition-colors mr-1"
+                                            title="自分で入力"
+                                        >
+                                            <span className="material-symbols-outlined">add</span>
+                                        </button>
+                                        {selectedCategory && apiKey && !aiDisabled && (
+                                            <button
+                                                onClick={handleReload}
+                                                disabled={isLoading}
+                                                className={`w-10 h-10 flex-shrink-0 bg-shelter-chip rounded-xl flex items-center justify-center text-shelter-muted transition-all ${isLoading ? 'animate-spin opacity-50' : 'active:rotate-180 hover:bg-shelter-border'} mr-1`}
+                                                title="他の言葉を提案"
+                                            >
+                                                <span className="material-symbols-outlined">refresh</span>
+                                            </button>
+                                        )}
+                                        {!selectedCategory ? (
+                                            <div className="flex items-center px-4 py-2 italic text-[11px] text-shelter-muted font-mono bg-shelter-chip rounded-xl">
+                                                カテゴリを選んでください
+                                            </div>
+                                        ) : (
+                                            dynamicWords[selectedCategory].map(word => (
+                                                <Chip key={word} loading={isLoading} onClick={() => handleAddWord(word)}>{word}</Chip>
+                                            ))
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Tab: 観測 (Observation)
+            const ObserveTab = () => {
+                const [records, setRecords] = useState([]);
+                const [mode, setMode] = useState('distill'); // distill, sediment
+
+                useEffect(() => {
+                    const fetch = async () => {
+                        const all = await db.logs.orderBy('timestamp').reverse().toArray();
+                        setRecords(all);
+                    };
+                    fetch();
+                }, []);
+
+                return (
+                    <div className="p-8 h-full bg-shelter-bg overflow-auto">
+                        <div className="flex justify-between items-end mb-8">
+                            <h2 className="text-xs font-mono text-shelter-muted tracking-widest uppercase">Observation</h2>
+                            <div className="flex gap-4 text-[10px] font-mono">
+                                <button onClick={() => setMode('distill')} className={mode === 'distill' ? 'underline' : 'text-shelter-muted'}>抽出</button>
+                                <button onClick={() => setMode('sediment')} className={mode === 'sediment' ? 'underline' : 'text-shelter-muted'}>堆積</button>
+                            </div>
+                        </div>
+
+                        {records.length === 0 ? (
+                            <div className="text-sm text-shelter-muted font-mono">[ 堆積なし ]</div>
+                        ) : (
+                            <div className={mode === 'distill' ? "space-y-12" : "flex flex-wrap-reverse gap-x-2 gap-y-1 items-end"}>
+                                {records.map(log => (
+                                    <div key={log.id} className={mode === 'distill' ? "group relative" : "contents"}>
+                                        {mode === 'distill' && (
+                                            <div className="text-[10px] font-mono text-shelter-muted mb-2 opacity-50">
+                                                {log.dateString.replace(/-/g, '.').substring(2)}
+                                            </div>
+                                        )}
+                                        <div className={mode === 'distill' ? "flex flex-wrap gap-2" : "contents"}>
+                                            {log.words.map((w, i) => (
+                                                <span
+                                                    key={i}
+                                                    className={mode === 'distill'
+                                                        ? "text-sm border-b border-shelter-border pb-0.5"
+                                                        : "text-xs px-2 py-0.5 bg-white border border-shelter-border rounded opacity-70"
+                                                    }
+                                                >
+                                                    {w}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // Tab: 設定 (System)
+            const SettingsTab = () => {
+                const handleExport = async () => {
+                    const all = await db.logs.toArray();
+                    const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `shelter_backup_${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                };
+
+                const handleClear = async () => {
+                    if (confirm('すべての記録を消去しますか？（元に戻せません）')) {
+                        await db.logs.clear();
+                        alert('データを消去しました');
+                    }
+                };
+
+                return (
+                    <div className="p-8 h-full bg-shelter-bg overflow-auto space-y-12">
+                        <h2 className="text-xs font-mono text-shelter-muted tracking-widest uppercase mb-8">System</h2>
+
+                        <section className="space-y-4">
+                            <label className="block text-sm font-medium">Gemini API Key</label>
+                            <div className="relative">
+                                <input
+                                    type="password"
+                                    className="w-full bg-white border border-shelter-border p-3 rounded-lg text-sm font-mono outline-none shadow-sm focus:border-shelter-text transition-colors pr-10"
+                                    placeholder="AI を有効にするにはキーを入力..."
+                                    value={apiKey}
+                                    onChange={(e) => setApiKey(e.target.value)}
+                                />
+                                {apiKey && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-shelter-text opacity-50 flex items-center gap-1">
+                                        <span className="material-symbols-outlined !text-sm">check_circle</span>
+                                        <span className="text-[10px] font-mono">SAVED</span>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-[10px] text-shelter-muted leading-relaxed">
+                                キーを設定すると、AI がカテゴリに合わせて言葉を提案します。<br />
+                                入力した内容は自動的に保存されます（localStorage）。
+                            </p>
+                        </section>
+
+                        <section className="space-y-4 pt-8 border-t border-shelter-border">
+                            <h3 className="text-sm font-medium">Data Management</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button onClick={handleExport} className="bg-white border border-shelter-border py-3 rounded-lg text-xs font-mono hover:bg-shelter-chip transition-colors">Export JSON</button>
+                                <button onClick={handleClear} className="bg-white border border-shelter-border py-3 rounded-lg text-xs font-mono text-red-400 hover:bg-red-50 transition-colors">Clear All</button>
+                            </div>
+                        </section>
+                    </div>
+                );
+            };
+
+            // Main Layout
+            return (
+                <div className="max-w-md mx-auto h-[100dvh] shadow-2xl relative overflow-hidden flex flex-col bg-white">
+                    {/* Content */}
+                    <main className="flex-1 overflow-hidden">
+                        {activeTab === 'record' && <RecordTab />}
+                        {activeTab === 'observe' && <ObserveTab />}
+                        {activeTab === 'settings' && <SettingsTab />}
+                    </main>
+
+                    {/* Navbar */}
+                    <nav className="h-20 bg-white border-t border-shelter-border flex items-center justify-around px-8 pb-4">
+                        <button onClick={() => setActiveTab('record')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'record' ? 'text-shelter-text' : 'text-shelter-muted'}`}>
+                            <span className="text-base font-medium">記録</span>
+                        </button>
+                        <button onClick={() => setActiveTab('observe')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'observe' ? 'text-shelter-text' : 'text-shelter-muted'}`}>
+                            <span className="text-base font-medium">観測</span>
+                        </button>
+                        <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'settings' ? 'text-shelter-text' : 'text-shelter-muted'}`}>
+                            <span className="text-base font-medium">設定</span>
+                        </button>
+                    </nav>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
+</body>
+
+</html>

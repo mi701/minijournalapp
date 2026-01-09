@@ -1,0 +1,9 @@
+# Local environment
+.vscode/
+.DS_Store
+
+# Shelter App specific
+# API Keys and tokens should not be committed (though stored in localStorage in this app)
+# If you create a .env file later, it will be ignored
+.env
+.env.*
