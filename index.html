@@ -141,17 +141,18 @@
 
         // --- Constants & Fallbacks ---
         const DEFAULT_WORDS = {
-            body: ['重い', '軽い', 'だるい', '張っている', '力が入らない', '冷えている', 'ぼんやり', '眠い', '乾いている', 'こわばっている', '何も感じない'],
-            mind: ['回らない', '静か', 'うるさい', '散らかっている', '止まっている', '追いつかない', '空っぽ', '引っかかっている', '鈍い', '早い'],
-            vibe: ['落ち着かない', '静か', '重たい', 'やわらかい', '張りつめている', 'ざわざわ', 'ぼんやり', '乾いた感じ', 'ぬるい', '閉じている'],
-            act: ['止まっていた', 'ゆっくり', 'だらだら', '最低限', 'なんとか', '同じこと', '途中まで', '手を動かした', '横になっていた', 'ぼーっとした'],
-            dist: ['近い', '遠い', 'ずれている', '触れていない', '関わらなかった', '一人', '外側にいた', '内側にこもっていた', '境目がない'],
-            time: ['長かった', '短かった', '早かった', '止まっていた', '進んだ気がしない', '一瞬', 'だらだら続いた', '区切りがない'],
-            texture: ['固い', '柔らかい', 'ざらざら', '滑らか', '尖っている', '湿っている', '乾いている', '粘る', 'さらさら'],
-            light: ['暗い', 'まぶしい', 'ぼんやり', '鮮やか', '灰色', '透き通っている', '濁っている', '淡い', '濃い'],
-            sound: ['静か', '響いている', '遮られている', '遠くの音', '継続的な音', '途切れた音', 'くぐもった音', 'かすかな音'],
-            gravity: ['沈んでいる', '浮いている', '傾いている', '支えられている', '離れている', '引き寄せられる', '反発している']
+            feeling: ['だるい', 'めんどい', 'ねむい', 'つかれた', 'しんどい', 'イライラ', 'もやもや', 'かなしい', 'さみしい', 'なんとかなった', '終わった', 'とりあえず', 'まあまあ', '普通', '限界', '余裕', '無理', '可能', '不可能'],
+            body: ['ねむれない', 'おなかすいた', '喉がかわいた', '目がしょぼしょぼする', '肩がこってる', '胃が重い', '体が重い', '頭がいたい', '腰がいたい', 'ふらふら', 'ぱんぱん', 'ひりひり', 'ずきずき', 'がんがん', 'じんじん', '冷える', '火照る'],
+            state: ['ぼーっとする', 'なにもしたくない', '帰りたい', '休みたい', '横になりたい', '動きたくない', 'やる気が出ない', '集中できない', 'どうでもいい', 'なんか嫌', '適当', 'だいたい', 'ほどほど', 'わかる', 'わからない', 'できる', 'できない'],
+            action: ['テレビ見てた', 'スマホ見てた', '外に出た', '歩いた', '食べた', 'お風呂入った', '顔洗った', '薬飲んだ', '寝てた', '座ってる', '立ってる', '待ってる', 'やる', 'やらない', 'いく', 'いけない', 'だす', 'いれる'],
+            env: ['あつい', 'さむい', 'うるさい', 'まぶしい', '落ち着かない', 'そわそわ', 'どきどき', '静か', '暗い', '狭い', '広い', '雨降ってる', '風が強い', '日が刺してる', '音がする', '人が多い', '一人'],
+            objects: ['スマホ', '充電器', '時計', 'コップ', '皿', 'ティッシュ', 'ゴミ', '本', 'ペン', '服', '財布', '鍵', '布団', '枕', '椅子', '机'],
+            texture: ['ふわふわ', 'さらさら', 'べたべた', 'つるつる', 'ごつごつ', 'ちくちく', '固い', '柔らかい', 'ざらざら', '滑らか', '尖っている', '湿っている', '乾いている', '粘る'],
+            dist_space: ['近い', '遠い', 'ずれている', '間に挟まっている', '外側', '内側', '横', '上', '下', '右', '左', '前', '後ろ', 'まわり', '端っこ', '隙間'],
+            time: ['今', 'さっき', 'これから', '明日', '昨日', 'また今度', 'ずっと', 'しばらく', 'ちょっと', 'たまに', 'いつも', '全然', '最後', '最初', '途中', '終わり'],
+            quantity: ['いっぱい', '半分', '少し', 'たくさん', '全部', 'これ', 'それ', 'あれ', 'どれ', 'もうちょっと', 'ぎりぎり']
         };
+
 
         // --- Components ---
 
@@ -308,8 +309,8 @@
                 }
             };
 
-            const handleAddCustomWord = (e) => {
-                if (e.key === 'Enter' && customWord.trim()) {
+            const handleAddCustomWord = () => {
+                if (customWord.trim()) {
                     handleAddWord(customWord.trim());
                     setCustomWord('');
                     setShowCustomInput(false);
@@ -337,17 +338,18 @@
                 const itemsPerPage = 5;
 
                 const categories = [
-                    { id: 'body', label: '体' },
-                    { id: 'mind', label: '頭' },
-                    { id: 'vibe', label: '気配' },
-                    { id: 'act', label: '動き' },
-                    { id: 'dist', label: '距離' },
+                    { id: 'feeling', label: '気分' },
+                    { id: 'body', label: '身体' },
+                    { id: 'state', label: '状態' },
+                    { id: 'action', label: '動き' },
+                    { id: 'env', label: '周囲' },
+                    { id: 'objects', label: '物品' },
+                    { id: 'texture', label: '感触' },
+                    { id: 'dist_space', label: '場所' },
                     { id: 'time', label: '時間' },
-                    { id: 'texture', label: '質感' },
-                    { id: 'light', label: '光・色' },
-                    { id: 'sound', label: '音' },
-                    { id: 'gravity', label: '重力' }
+                    { id: 'quantity', label: '分量' }
                 ];
+
 
                 const totalPages = Math.ceil(categories.length / itemsPerPage);
                 const currentCats = categories.slice(catPage * itemsPerPage, (catPage + 1) * itemsPerPage);
@@ -355,35 +357,8 @@
                 return (
                     <div className="flex flex-col h-full bg-shelter-bg">
                         {/* The Canvas */}
-                        <div className="canvas-area p-8 overflow-auto flex flex-wrap content-start gap-3 relative">
-                            {debugInfo && (
-                                <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 z-50 animate-in fade-in zoom-in duration-300">
-                                    <div className="bg-white/95 backdrop-blur-sm border border-shelter-border p-6 rounded-2xl shadow-xl space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-shelter-text animate-ping' : (aiDisabled ? 'bg-shelter-muted' : 'bg-red-400')}`}></span>
-                                            <span className="text-[10px] font-mono font-bold tracking-tighter uppercase text-shelter-muted">
-                                                {isLoading ? 'AI Connecting' : (aiDisabled ? 'AI Resting' : 'Connection Info')}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm font-mono leading-relaxed text-shelter-text break-words">
-                                            {debugInfo}
-                                        </p>
-                                        {!isLoading && (
-                                            <button
-                                                onClick={() => setDebugInfo(null)}
-                                                className="text-[10px] font-mono underline text-shelter-muted hover:text-shelter-text"
-                                            >
-                                                [ Close ]
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                            {canvasWords.length === 0 && !debugInfo ? (
-                                <div className="w-full h-full flex items-center justify-center text-shelter-muted font-mono text-sm">
-                                    [ 余白 ]
-                                </div>
-                            ) : (
+                        <div className="canvas-area p-6 flex-none h-32 overflow-auto flex flex-wrap content-start gap-3 relative border-b border-shelter-border/50">
+                            {canvasWords.length === 0 ? null : (
                                 canvasWords.map((word, i) => (
                                     <CanvasWord
                                         key={`${word}-${i}`}
@@ -395,8 +370,8 @@
                         </div>
 
                         {/* Input Deck */}
-                        <div className="input-deck bg-white border-t border-shelter-border p-6 flex flex-col gap-4 shadow-[0_-4px_24px_-10px_rgba(0,0,0,0.05)] rounded-t-3xl relative">
-                            {/* Tier 1: Categories (Top) */}
+                        <div className="input-deck flex-1 bg-white p-8 flex flex-col gap-10 rounded-t-[2.5rem] shadow-[0_-8px_40px_-15px_rgba(0,0,0,0.08)] relative overflow-y-auto">
+                            {/* Tier 1: Categories & Save (Top) */}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <button
@@ -411,7 +386,7 @@
                                             <button
                                                 key={cat.id}
                                                 onClick={() => handleCategoryClick(cat.id)}
-                                                className={`text-base font-semibold transition-colors ${selectedCategory === cat.id ? 'text-shelter-text border-b-2 border-shelter-text' : 'text-shelter-muted hover:text-shelter-text'}`}
+                                                className={`text-base font-semibold whitespace-nowrap transition-colors ${selectedCategory === cat.id ? 'text-shelter-text border-b-2 border-shelter-text' : 'text-shelter-muted hover:text-shelter-text'}`}
                                             >
                                                 {cat.label}
                                             </button>
@@ -426,28 +401,65 @@
                                     </button>
                                 </div>
 
-                                <button
-                                    onClick={handleSave}
-                                    disabled={canvasWords.length === 0}
-                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${canvasWords.length > 0 ? 'bg-shelter-text text-white shadow-md active:scale-95' : 'bg-shelter-chip text-shelter-muted cursor-not-allowed opacity-50'}`}
-                                    title="記録を保存"
-                                >
-                                    <span className="material-symbols-outlined !text-base">done_all</span>
-                                </button>
+                                <div className="flex flex-col items-center gap-2 pr-2">
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={canvasWords.length === 0}
+                                        className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${canvasWords.length > 0 ? 'bg-shelter-text text-white shadow-md active:scale-95' : 'bg-shelter-chip text-shelter-muted cursor-not-allowed opacity-50'}`}
+                                        title="記録を保存"
+                                    >
+                                        <span className="material-symbols-outlined !text-lg">done_all</span>
+                                    </button>
+
+                                    {debugInfo && (
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-shelter-chip transition-all min-w-[80px] justify-center">
+                                            <span className={`w-1 h-1 rounded-full ${isLoading ? 'bg-shelter-text animate-ping' : (aiDisabled ? 'bg-shelter-muted' : 'bg-red-400')}`}></span>
+                                            <span className="text-[8px] font-medium tracking-tight text-shelter-muted whitespace-nowrap">
+                                                {isLoading ? '考え中' : (aiDisabled ? 'AI休憩中' : 'エラー')}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Tier 2: Word Chips (Middle) */}
-                            <div className="flex-1 min-h-[120px] max-h-[200px] overflow-y-auto selection-scroll flex flex-wrap content-start gap-2 pr-2 custom-scrollbar">
+                            <div className="flex-1 flex flex-wrap content-start gap-4 custom-scrollbar">
                                 {showCustomInput ? (
-                                    <input
-                                        autoFocus
-                                        className="w-full bg-shelter-chip px-4 py-2 rounded-xl text-sm outline-none font-mono mb-2"
-                                        placeholder="自由入力..."
-                                        value={customWord}
-                                        onChange={(e) => setCustomWord(e.target.value)}
-                                        onKeyDown={handleAddCustomWord}
-                                        onBlur={() => !customWord && setShowCustomInput(false)}
-                                    />
+                                    <div className="w-full flex items-center gap-2 mb-2">
+                                        <input
+                                            autoFocus
+                                            id="custom-word-input"
+                                            className="flex-1 bg-white border-2 border-shelter-border/30 px-6 py-4 rounded-2xl text-base outline-none placeholder:opacity-30 focus:border-shelter-text/20 transition-colors"
+                                            placeholder="自由な言葉..."
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                                                    const val = e.target.value.trim();
+                                                    if (val) {
+                                                        handleAddWord(val);
+                                                        e.target.value = '';
+                                                        setShowCustomInput(false);
+                                                    }
+                                                }
+                                            }}
+                                            onBlur={(e) => {
+                                                if (!e.target.value.trim()) setShowCustomInput(false);
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const input = document.getElementById('custom-word-input');
+                                                if (input && input.value.trim()) {
+                                                    handleAddWord(input.value.trim());
+                                                    input.value = '';
+                                                    setShowCustomInput(false);
+                                                }
+                                            }}
+                                            className="w-14 h-14 rounded-2xl flex items-center justify-center bg-shelter-text text-white shadow-md active:scale-95"
+                                            title="単語を追加"
+                                        >
+                                            <span className="material-symbols-outlined">check</span>
+                                        </button>
+                                    </div>
                                 ) : (
                                     <>
                                         <button
