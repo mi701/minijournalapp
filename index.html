@@ -43,14 +43,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Google AI SDK -->
-    <script type="importmap">
-        {
-          "imports": {
-            "@google/generative-ai": "https://esm.run/@google/generative-ai"
-          }
-        }
-    </script>
+
     <style>
         body {
             background-color: #f8f9fa;
@@ -130,7 +123,6 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
-        import { GoogleGenerativeAI } from "@google/generative-ai";
         const { useState, useEffect, useMemo, useCallback } = React;
 
         // --- Database ---
@@ -184,102 +176,80 @@
             const [canvasWords, setCanvasWords] = useState([]);
             const [dynamicWords, setDynamicWords] = useState(DEFAULT_WORDS);
             const [isLoading, setIsLoading] = useState(false);
-            const [apiKey, setApiKey] = useState(() => localStorage.getItem('shelter_gemini_api_key') || '');
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('shelter_groq_api_key') || '');
             const [showCustomInput, setShowCustomInput] = useState(false);
             const [customWord, setCustomWord] = useState('');
             const [debugInfo, setDebugInfo] = useState(null);
             const [aiDisabled, setAiDisabled] = useState(false);
 
             useEffect(() => {
-                localStorage.setItem('shelter_gemini_api_key', apiKey);
+                localStorage.setItem('shelter_groq_api_key', apiKey);
             }, [apiKey]);
 
 
             const fetchWords = async (category) => {
                 if (!apiKey || aiDisabled) {
-                    if (aiDisabled) setDebugInfo("クォータ制限のためAI生成を一時停止しています。");
+                    if (aiDisabled) setDebugInfo("制限のためAI生成を一時停止しています。");
                     return;
                 }
                 setIsLoading(true);
-                setDebugInfo("AI接続を診断中...");
+                setDebugInfo("Groq AI に接続中...");
 
                 try {
-                    // 1. 利用可能なモデルを取得して実在を確認する (事実ベースの切り分け)
-                    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-                    const listRes = await fetch(listUrl);
-                    if (!listRes.ok) throw new Error("APIキーの確認に失敗しました。キーが正しいか、有効期限を確認してください。");
-                    const listData = await listRes.json();
+                    const trimmedKey = apiKey.trim();
+                    const url = "https://api.groq.com/openai/v1/chat/completions";
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${trimmedKey}`
+                        },
+                        body: JSON.stringify({
+                            model: "llama-3-8b-8192", // より一般的で安定したモデルに変更
+                            messages: [{
+                                role: "user",
+                                content: `Generate 10 abstract Japanese words for category: ${category}. Return ONLY a JSON array of strings: ["w1", "w2", ...]`
+                            }],
+                            response_format: { type: "json_object" },
+                            temperature: 1.0
+                        })
+                    });
 
-                    // 利用可能モデルのIDを正規化して抽出
-                    const availableModels = listData.models.map(m => m.name.split('/').pop());
-
-                    // 2. 優先順位に基づき候補を選別 (最新モデルを優先的に含める)
-                    const candidates = [
-                        "gemini-2.0-flash-exp",
-                        "gemini-2.0-flash",
-                        "gemini-1.5-flash",
-                        "gemini-1.5-flash-8b",
-                        "gemini-pro"
-                    ].filter(m => availableModels.includes(m));
-
-                    if (candidates.length === 0) {
-                        throw new Error(`利用可能なモデルが見つかりません。ListModels結果: ${availableModels.slice(0, 3).join(', ')}...`);
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        if (res.status === 401) {
+                            throw new Error("APIキーが無効、または期限切れです。(401)");
+                        }
+                        if (res.status === 429) {
+                            setAiDisabled(true);
+                            throw new Error("Rate limit exceeded. AI is resting. (429)");
+                        }
+                        throw new Error(err.error?.message || `HTTP Error ${res.status}`);
                     }
 
+                    const data = await res.json();
+                    const content = data.choices[0].message.content;
+
+                    // Groq のレスポンスから配列を抽出
                     let resultWords = null;
-                    let lastErrorMsg = "";
-
-                    // 3. 有効なモデルから順に trial-and-error で接続を試みる (自己修復)
-                    for (const modelId of candidates) {
-                        try {
-                            setDebugInfo(`AI(${modelId}) から言葉を募集中...`);
-                            // 事実: v1beta エンドポイントを使用することで全モデルの最新機能にアクセス
-                            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-                            const res = await fetch(url, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    contents: [{ parts: [{ text: `Generate 10 abstract Japanese words for category: ${category}. Return ONLY a JSON array of strings: ["w1", "w2", ...]` }] }],
-                                    generationConfig: { temperature: 1.0 }
-                                })
-                            });
-
-                            if (res.ok) {
-                                const data = await res.json();
-                                const text = data.candidates[0].content.parts[0].text;
-                                const match = text.match(/\[.*\]/s);
-                                if (match) {
-                                    resultWords = JSON.parse(match[0]);
-                                    break; // 成功したらループを抜ける
-                                }
-                            } else {
-                                const err = await res.json();
-                                lastErrorMsg = err.error?.message || res.statusText;
-
-                                // 事実: Quota exceeded (429/Limit 0) の場合は他のモデルを試しても無意味なため中断
-                                if (res.status === 429 || lastErrorMsg.includes("quota")) {
-                                    setAiDisabled(true);
-                                    throw new Error(`Quota limit reached: ${lastErrorMsg}`);
-                                }
-                                console.warn(`Candidate ${modelId} failed:`, lastErrorMsg);
-                            }
-                        } catch (e) {
-                            lastErrorMsg = e.message;
-                        }
+                    try {
+                        const parsed = JSON.parse(content);
+                        // もし {"words": ["..."]} のような形式なら抽出
+                        resultWords = Array.isArray(parsed) ? parsed : (parsed.words || Object.values(parsed)[0]);
+                    } catch (e) {
+                        const match = content.match(/\[.*\]/s);
+                        if (match) resultWords = JSON.parse(match[0]);
                     }
 
                     if (Array.isArray(resultWords)) {
                         setDynamicWords(prev => ({ ...prev, [category]: resultWords }));
                         setDebugInfo(null);
                     } else {
-                        throw new Error(lastErrorMsg || "単語の生成に失敗しました。");
+                        throw new Error("有効な言葉のリストを受け取れませんでした。");
                     }
                 } catch (error) {
-                    console.error("Gemini API Error:", error);
-                    const msg = error.message.includes("Quota")
-                        ? "AIは現在クォータ制限のためお休みしています。内蔵の語彙をお楽しみください。"
-                        : `接続状況を確認しています: ${error.message}`;
-                    setDebugInfo(msg);
+                    console.error("Groq API Error:", error);
+                    setDebugInfo(`接続エラー: ${error.message}`);
                 } finally {
                     setIsLoading(false);
                 }
@@ -575,7 +545,7 @@
                         <h2 className="text-xs font-mono text-shelter-muted tracking-widest uppercase mb-8">System</h2>
 
                         <section className="space-y-4">
-                            <label className="block text-sm font-medium">Gemini API Key</label>
+                            <label className="block text-sm font-medium">Groq API Key</label>
                             <div className="relative">
                                 <input
                                     type="password"

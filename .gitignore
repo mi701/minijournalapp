@@ -7,3 +7,5 @@
 # If you create a .env file later, it will be ignored
 .env
 .env.*
+Groq_KEY.txt
+curl httpsapi.groq.comopenaiv1chatc.txt
